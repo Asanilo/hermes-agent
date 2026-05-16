@@ -2167,11 +2167,13 @@ class BasePlatformAdapter(ABC):
         )
         ext_part = '|'.join(e.lstrip('.') for e in _LOCAL_MEDIA_EXTS)
 
-        # (?<![/:\w.]) prevents matching inside URLs (e.g. https://…/img.png)
+# (?<![/:\w.]) prevents matching inside URLs (e.g. https://…/img.png)
         #             and relative paths (./foo.png)
         # (?:~/|/)    anchors to absolute or home-relative paths
+        # [^\s/]+     matches any non-whitespace, non-slash chars (supports Unicode
+        #             filenames like emoji and CJK characters, unlike bare \w)
         path_re = re.compile(
-            r'(?<![/:\w.])(?:~/|/)(?:[\w.\-]+/)*[\w.\-]+\.(?:' + ext_part + r')\b',
+            r'(?<![/:\w.])(?:~/|/)(?:[^\s/]+/)*[^\s/]+\.(?:' + ext_part + r')\b',
             re.IGNORECASE,
         )
 
