@@ -304,6 +304,8 @@ _MIN_KEEPALIVE_INTERVAL = 5        # clamp floor for configured intervals
 # Environment variables that are safe to pass to stdio subprocesses
 _SAFE_ENV_KEYS = frozenset({
     "PATH", "HOME", "USER", "LANG", "LC_ALL", "TERM", "SHELL", "TMPDIR",
+    # MiniMax MCP server
+    "MINIMAX_API_KEY", "MINIMAX_API_HOST",
 })
 
 _SAFE_ENV_KEYS_CASE_INSENSITIVE = frozenset({
