@@ -2061,14 +2061,37 @@ class AIAgent:
                         # Thread gateway session key for stable per-chat Honcho session isolation
                         if self._gateway_session_key:
                             _init_kwargs["gateway_session_key"] = self._gateway_session_key
-                        # Profile identity for per-profile provider scoping
-                        try:
-                            from hermes_cli.profiles import get_active_profile_name
-                            _profile = get_active_profile_name()
+                        # Profile identity for per-profile provider scoping.
+                        # Read HERMES_PROFILE_NAME / HERMES_PROFILE env first so
+                        # independent gateways (e.g. miao running outside the
+                        # profiles/ tree) can declare their own identity without
+                        # relying on the cwd/profile-discovery heuristic.
+                        _profile = None
+                        _env_profile = os.environ.get("HERMES_PROFILE_NAME") or os.environ.get("HERMES_PROFILE")
+                        if _env_profile:
+                            _profile = _env_profile
+                        else:
+                            try:
+                                from hermes_cli.profiles import get_active_profile_name
+                                _profile = get_active_profile_name()
+                            except Exception:
+                                _profile = None
+                        if _profile:
                             _init_kwargs["agent_identity"] = _profile
-                            _init_kwargs["agent_workspace"] = "hermes"
-                        except Exception:
-                            pass
+                        # agent_workspace is conceptually the profile's home
+                        # directory (e.g. "miao" for miao_home, "hermes" for
+                        # ~/.hermes). Identity ("lin-miao") and workspace ("miao")
+                        # are decoupled so the import scripts that wrote under
+                        # workspace=miao can still be searched by a session whose
+                        # identity is "lin-miao". Fall back to "hermes" when we
+                        # can't infer one.
+                        _hermes_home_path = str(get_hermes_home())
+                        _ws = os.path.basename(os.path.normpath(_hermes_home_path)) or "hermes"
+                        if _ws.startswith("."):
+                            _ws = _ws.lstrip(".")
+                        if _ws.endswith("_home"):
+                            _ws = _ws[: -len("_home")]
+                        _init_kwargs["agent_workspace"] = _ws or "hermes"
                         self._memory_manager.initialize_all(**_init_kwargs)
                         logger.info("Memory provider '%s' activated", _mem_provider_name)
                     else:
