@@ -11829,15 +11829,17 @@ def cmd_dashboard(args):
     # fail-closed SystemExit unchanged.
     _maybe_setup_dashboard_auth_interactively(args)
 
-    # The in-browser Chat tab (the embedded TUI over PTY/WebSocket) is always
-    # available — the desktop app and the dashboard's own Chat tab both rely on
-    # the `/api/ws` + `/api/pty` sockets, so there is no reason to gate them.
+    # The in-browser Chat tab (the embedded TUI over PTY/WebSocket) is gated
+    # by the ``dashboard.embedded_chat`` config key (default: False).  The
+    # ``--tui`` CLI flag overrides the config to True for one-off launches.
+    embedded_chat_override = True if getattr(args, "tui", False) else None
     start_server(
         host=args.host,
         port=args.port,
         open_browser=not args.no_open,
         allow_public=getattr(args, "insecure", False),
         initial_profile=getattr(args, "open_profile", "") or "",
+        embedded_chat=embedded_chat_override,
     )
 
 
