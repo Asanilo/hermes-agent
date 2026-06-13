@@ -191,7 +191,7 @@ _SESSION_HEADER_NAME = "X-Hermes-Session-Token"
 # unconditional part of the dashboard.  Kept as a module-level constant (rather
 # than inlining ``True`` at every gate) so the WS endpoints and the SPA token
 # injection share a single, testable seam.
-_DASHBOARD_EMBEDDED_CHAT_ENABLED = True
+_DASHBOARD_EMBEDDED_CHAT_ENABLED = False  # overridden by start_server from config
 
 # Simple rate limiter for the reveal endpoint
 _reveal_timestamps: List[float] = []
@@ -11631,6 +11631,7 @@ def start_server(
     open_browser: bool = True,
     allow_public: bool = False,
     initial_profile: str = "",
+    embedded_chat: Optional[bool] = None,
 ):
     """Start the web UI server.
 
@@ -11640,6 +11641,20 @@ def start_server(
     machine dashboard.
     """
     import uvicorn
+
+    global _DASHBOARD_EMBEDDED_CHAT_ENABLED
+
+    # Read embedded_chat: explicit parameter wins, then config, then default False.
+    if embedded_chat is not None:
+        _DASHBOARD_EMBEDDED_CHAT_ENABLED = bool(embedded_chat)
+    else:
+        try:
+            _cfg = load_config()
+            _DASHBOARD_EMBEDDED_CHAT_ENABLED = bool(
+                cfg_get(_cfg, "dashboard", "embedded_chat", default=False)
+            )
+        except Exception:
+            _DASHBOARD_EMBEDDED_CHAT_ENABLED = False
 
     # Phase 0: stash the auth-gate flag on app.state so middleware / SPA-token
     # injection / WS-auth paths can branch on it consistently.  Phase 3.5
