@@ -395,6 +395,7 @@ class FeishuAdapterSettings:
     group_rules: Dict[str, FeishuGroupRule] = field(default_factory=dict)
     allow_bots: str = "none"  # "none" | "mentions" | "all"
     require_mention: bool = True
+    free_response_chats: frozenset[str] = frozenset()
 
 
 @dataclass
@@ -541,6 +542,19 @@ def _coerce_int(value: Any, default: Optional[int] = None, min_value: int = 0) -
 def _coerce_required_int(value: Any, default: int, min_value: int = 0) -> int:
     parsed = _coerce_int(value, default=default, min_value=min_value)
     return default if parsed is None else parsed
+
+
+def _parse_free_response_chats(extra: Dict[str, Any]) -> frozenset[str]:
+    """Return chat IDs where the bot responds without requiring @mention."""
+    raw = extra.get("free_response_chats")
+    if raw is None:
+        raw = os.getenv("FEISHU_FREE_RESPONSE_CHATS", "")
+    if isinstance(raw, (list, frozenset)):
+        return frozenset(str(p).strip() for p in raw if str(p).strip())
+    s = str(raw).strip() if raw is not None else ""
+    if s:
+        return frozenset(part.strip() for part in s.split(",") if part.strip())
+    return frozenset()
 
 
 # ---------------------------------------------------------------------------
@@ -1575,6 +1589,7 @@ class FeishuAdapter(BasePlatformAdapter):
             require_mention=_to_boolean(
                 extra.get("require_mention", os.getenv("FEISHU_REQUIRE_MENTION", "true"))
             ),
+            free_response_chats=_parse_free_response_chats(extra),
         )
 
     def _apply_settings(self, settings: FeishuAdapterSettings) -> None:
@@ -1607,6 +1622,7 @@ class FeishuAdapter(BasePlatformAdapter):
         self._ws_ping_timeout = settings.ws_ping_timeout
         self._allow_bots = settings.allow_bots
         self._require_mention = settings.require_mention
+        self._free_response_chats = settings.free_response_chats
 
     def _build_event_handler(self) -> Any:
         if EventDispatcherHandler is None:
@@ -4123,6 +4139,9 @@ class FeishuAdapter(BasePlatformAdapter):
             getattr(sender, "sender_id", None), chat_id, is_bot=is_bot,
         ):
             return "group_policy_rejected"
+        # free_response_chats bypass mention requirement
+        if chat_id in self._free_response_chats:
+            return None
         if require_mention and not self._mentions_self(message):
             return "group_policy_rejected"
         return None
@@ -4374,13 +4393,12 @@ class FeishuAdapter(BasePlatformAdapter):
     # =========================================================================
 
     def _build_outbound_payload(self, content: str) -> tuple[str, str]:
-        # Feishu post-type 'md' elements do not render markdown tables; sending
-        # table content as post causes the message to appear blank on the client.
-        # Force plain text for anything that looks like a markdown table.
-        if _MARKDOWN_TABLE_RE.search(content):
-            text_payload = {"text": content}
-            return "text", json.dumps(text_payload, ensure_ascii=False)
-        if _MARKDOWN_HINT_RE.search(content):
+        # Try post for any content with markdown hints OR a markdown table.
+        # Earlier versions forced text for tables (Feishu's 'md' element did
+        # not render them), but lark-cli proves the full post format does
+        # render tables, and the Feishu API itself returns a clean error
+        # that we fall back from below (see _feishu_send_with_retry handlers).
+        if _MARKDOWN_HINT_RE.search(content) or _MARKDOWN_TABLE_RE.search(content):
             return "post", _build_markdown_post_payload(content)
         text_payload = {"text": content}
         return "text", json.dumps(text_payload, ensure_ascii=False)
