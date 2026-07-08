@@ -4602,8 +4602,24 @@ def _web_ui_build_needed(web_dir: Path) -> bool:
         if mp.exists() and mp.stat().st_mtime > dist_mtime:
             return True
     # Workspace root lockfile (single package-lock.json covers all workspaces).
+    # Compared by **content hash** rather than mtime, because the TUI's
+    # ``npm install`` may legitimately touch the same root lockfile (via
+    # ``--workspace ui-tui``) without changing its content — which would
+    # otherwise force a spurious web UI rebuild on every dashboard launch.
     root_lock = project_root / "package-lock.json"
-    if root_lock.exists() and root_lock.stat().st_mtime > dist_mtime:
+    if root_lock.exists():
+        h = hashlib.sha256()
+        h.update(root_lock.read_bytes())
+        cur = h.hexdigest()
+        stamp = dist_dir / ".lockfile_hash"
+        if stamp.exists():
+            prev = stamp.read_text("utf-8").strip()
+            if cur == prev:
+                return False
+        # First build, dist cleaned, or content actually changed → build.
+        # Write the current hash alongside the dist so the next check can
+        # compare against content rather than mtime.
+        stamp.write_text(cur, encoding="utf-8")
         return True
     return False
 
