@@ -1863,6 +1863,21 @@ def _run_job_script(script_path: str) -> tuple[bool, str]:
     else:
         argv = [sys.executable, str(path)]
 
+    # ── Profile-aware dispatch: pass --profile to proactive_tick.py ──
+    extra_args = []
+    if path.name == "proactive_tick.py":
+        home = _get_hermes_home()
+        home_str = str(home)
+        default_hermes = str(Path.home() / ".hermes")
+        if home_str.startswith(default_hermes):
+            rel = home_str[len(default_hermes):].strip("/")
+            if rel.startswith("profiles/"):
+                parts = rel.split("/")
+                if len(parts) >= 2:
+                    extra_args = ["--profile", parts[1]]
+
+    argv = argv + extra_args
+
     try:
         from tools.environments.local import _sanitize_subprocess_env
 
